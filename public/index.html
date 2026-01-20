@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Irrigation Intelligente Pro</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; text-align: center; padding: 20px; }
+        .container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+        .card { 
+            background: white; padding: 20px; border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 220px;
+        }
+        .value { font-size: 2.2em; font-weight: bold; margin: 10px 0; color: #333; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; margin: 5px; }
+        .btn-on { background: #2ecc71; } .btn-off { background: #e74c3c; }
+        .status-on { color: #2ecc71; } .status-off { color: #e74c3c; }
+        
+        /* Style dyal Graphique */
+        .chart-container {
+            width: 90%; max-width: 800px; margin: 0 auto; background: white;
+            padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <h1 style="color:#2c3e50;">🌱 Dashboard Irrigation Pro</h1>
+
+    <div class="container">
+        <div class="card">
+            <h3>🌡️ Température</h3>
+            <div id="temp" class="value">-- °C</div>
+        </div>
+        <div class="card">
+            <h3>💧 Humidité Sol</h3>
+            <div id="sol" class="value">-- %</div>
+        </div>
+        <div class="card">
+            <h3>⚙️ État Pompe</h3>
+            <div id="pompe" class="value status-off">OFF</div>
+            <div>
+                <button class="btn btn-on" onclick="controlPompe('ON')">ON</button>
+                <button class="btn btn-off" onclick="controlPompe('OFF')">OFF</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // Configuration du Graphique
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Humidité Sol (%)',
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                    data: [],
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Température (°C)',
+                    borderColor: '#e67e22',
+                    backgroundColor: 'rgba(230, 126, 34, 0.1)',
+                    data: [],
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+
+        // 1. Charger l'historique au démarrage
+        fetch('/api/history')
+            .then(response => response.json())
+            .then(json => {
+                json.data.forEach(point => {
+                    addDataToChart(point.date, point.sol, point.temp);
+                });
+            });
+
+        // 2. Recevoir données en temps réel
+        socket.on('sensor-data', (data) => {
+            document.getElementById('temp').innerText = data.temp + " °C";
+            document.getElementById('sol').innerText = data.sol + " %";
+            
+            // Zid noqta jdida f l-graphique
+            addDataToChart(data.time, data.sol, data.temp);
+        });
+
+        socket.on('pompe-status', (status) => {
+            const el = document.getElementById('pompe');
+            el.innerText = status;
+            el.className = "value " + (status === 'ON' ? 'status-on' : 'status-off');
+        });
+
+        function controlPompe(action) {
+            socket.emit('control-pompe', action);
+        }
+
+        function addDataToChart(label, sol, temp) {
+            myChart.data.labels.push(label);
+            myChart.data.datasets[0].data.push(sol);
+            myChart.data.datasets[1].data.push(temp);
+            
+            // Khalli gher aakhir 20 noqta bach may3mrch l-graphique
+            if(myChart.data.labels.length > 20) {
+                myChart.data.labels.shift();
+                myChart.data.datasets[0].data.shift();
+                myChart.data.datasets[1].data.shift();
+            }
+            myChart.update();
+        }
+    </script>
+</body>
+</html>
